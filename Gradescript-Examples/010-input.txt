@@ -1,0 +1,12 @@
+rm -f f0.txt f1.txt f2.txt f3.txt f4.txt f5.txt
+/home/jplank/cs360/labs/Lab-8-Jsh/strays-fsleep /home/jplank/cs360/labs/Lab-8-Jsh/Gradescript-Examples/Input-File-1.txt f0.txt &
+/home/jplank/cs360/labs/Lab-8-Jsh/strays-fsleep /home/jplank/cs360/labs/Lab-8-Jsh/Gradescript-Examples/Input-File-7.txt f1.txt &
+/home/jplank/cs360/labs/Lab-8-Jsh/strays-fsleep /home/jplank/cs360/labs/Lab-8-Jsh/Gradescript-Examples/Input-File-3.txt f2.txt &
+thisprogramdoesnotexist &
+/home/jplank/cs360/labs/Lab-8-Jsh/strays-fsleep /home/jplank/cs360/labs/Lab-8-Jsh/Gradescript-Examples/Input-File-6.txt f3.txt &
+sleep 1
+/home/jplank/cs360/labs/Lab-8-Jsh/strays-fsleep f0.txt f1.txt
+/home/jplank/cs360/labs/Lab-8-Jsh/strays-fsleep f1.txt f2.txt
+/home/jplank/cs360/labs/Lab-8-Jsh/strays-fsleep f2.txt f3.txt
+sleep 1
+cat f0.txt f1.txt f2.txt f3.txt

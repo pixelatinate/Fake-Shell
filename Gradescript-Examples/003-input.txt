@@ -1,0 +1,2 @@
+sed s/o/oo/g /home/jplank/cs360/labs/Lab-8-Jsh/Gradescript-Examples/Input-File-5.txt
+grep /home/jplank/cs360/labs/Lab-8-Jsh/Gradescript-Examples/Input-File-5.txt

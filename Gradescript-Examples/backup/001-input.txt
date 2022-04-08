@@ -1,0 +1,1 @@
+cat /home/jplank/cs360/labs/lab7/Gradescript-Examples/Input-File-1.txt
