@@ -1,22 +1,18 @@
-# +mkmake+ -- Everything after this line is automatically generated
-
-EXECUTABLES = forkcat1 forkcat2 headsort
+CC = gcc 
+INCLUDES = -I/home/jplank/cs360/include
+CFLAGS = -g $(INCLUDES)
+LIBDIR = /home/jplank/cs360/objs
+LIBS = $(LIBDIR)/libfdr.a 
+EXECUTABLES = jsh
 
 all: $(EXECUTABLES)
-
-clean:
-	rm -f core *.o $(EXECUTABLES) a.out
 
 .SUFFIXES: .c .o
 .c.o:
 	$(CC) $(CFLAGS) -c $*.c
 
+jsh: jsh.o
+	$(CC) $(CFLAGS) -o jsh jsh.o $(LIBS)
 
-forkcat1: forkcat1.c
-	$(CC) $(CFLAGS) -o forkcat1 forkcat1.c
-
-forkcat2: forkcat2.c
-	$(CC) $(CFLAGS) -o forkcat2 forkcat2.c
-
-headsort: headsort.c
-	$(CC) $(CFLAGS) -o headsort headsort.c
+clean:
+	rm -rf core $(EXECUTABLES) *.o tmp*.txt f*.txt
