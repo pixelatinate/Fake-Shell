@@ -20,10 +20,11 @@
 # include "jrb.h"
 
 int main( int argc, char** argv ){
-    IS input ; 
-    input = new_inputstruct( NULL ) ;
-    char* prompt, *inputFile, *outputFileTruncate, *outputFileAppend ;
-    int status, pid, hasInput = 0, hasOutputTruncate = 0, hasOutputAppend = 0, parentWait = 1 ;
+    IS is ; 
+    is = new_inputstruct( NULL ) ;
+    char* prompt, *input, *outputFT, *outputFA ;
+    int status, pid ;
+    int parentWait = 1, inputFlag = 0, OTFlag = 0, OAFlag = 0 ;
     
     // Checks number of arguments and responds accordingly 
     if( argc == 1 ){
@@ -43,127 +44,144 @@ int main( int argc, char** argv ){
     }
 
     // Go through arguments 
-    while( get_line(input) >= 0 ){
-        int pipeCount = 0 ;
-        JRB pidJrb, temp ;
-        pidJrb = make_jrb() ;
+    while( get_line(is) >= 0 ){
+        int pipeCounter = 0 ;
+        JRB pidJRB, tmp ;
+        pidJRB = make_jrb() ;
 
+        // Break if we are given the command to exit 
         printf( "%s", prompt ) ;
-        if( strcmp( input -> fields[0], "exit" ) == 0 ){ 
+        if( strcmp( is->fields[0], "exit" ) == 0 ){ 
             break ;
         }
 
         // Add up pipes
-        for( int i = 0 ; i < input->NF ; i++ ){
-            if( strcmp( input->fields[i], "|" ) == 0 ){
-                pipeCount++ ;
+        for( int i = 0 ; i < ( is->NF ) ; i++ ){
+            if( strcmp( is->fields[i], "|" ) == 0 ){
+                pipeCounter++ ;
             }
         }
 
         // Goes through the commands 
-        char*** newargv = (char***) malloc( sizeof(char**) * ( pipeCount + 1 ) ) ;
-        
-        for( int pipe = 0, i = 0; pipe < pipeCount + 1; pipe++ ){
-            int cmdInd = 0 ;
-            char** command = (char**) malloc( sizeof(char*) * (input->NF + 1 ) ) ;
-            while( (i < input->NF ) && ( strcmp( input -> fields[i], "|" ) != 0 ) ){
-                if( strcmp( input->fields[i], "&" ) == 0 ){
-                    command[cmdInd] = NULL ;
+        char*** newArgv = (char***) malloc( sizeof(char**) * ( pipeCounter + 1 ) ) ;
+        for( int pipe = 0, i = 0; pipe < ( pipeCounter + 1 ); pipe++ ){
+            int cmd = 0 ;
+            char** command = (char**) malloc( sizeof(char*) * ( ( is->NF ) + 1 ) ) ;
+            
+            // Check each field in the line 
+            while( (i < is->NF ) && ( strcmp( is->fields[i], "|" ) != 0 ) ){
+                
+                // Tells us if we should wait for another task to complete
+                if( strcmp( is->fields[i], "&" ) == 0 ){
+                    command[cmd] = NULL ;
                     parentWait = 0 ;
                 }
-                else if( strcmp( input->fields[i], ">" ) == 0 ){
-                    hasOutputTruncate = 1 ;
-                    outputFileTruncate = strdup( input->fields[ i + 1 ] ) ;
-                    command[cmdInd] = NULL ;
-                    cmdInd++ ; 
+                
+                // Opens file as stdout and truncates 
+                else if( strcmp( is->fields[i], ">" ) == 0 ){
+                    OTFlag = 1 ;
+                    outputFT = strdup( is->fields[ i + 1 ] ) ;
+                    command[cmd] = NULL ;
+                    cmd++ ; 
                     i++ ;
                 }
-                else if( strcmp( input->fields[i], ">>" ) == 0 ){
-                    hasOutputAppend = 1 ;
-                    outputFileAppend = strdup( input->fields[ i + 1 ] ) ;
-                    command[cmdInd] = NULL ;
-                    cmdInd++ ; 
+
+                // Opens file as stdout and appends
+                else if( strcmp( is->fields[i], ">>" ) == 0 ){
+                    OAFlag = 1 ;
+                    outputFA = strdup( is->fields[ i + 1 ] ) ;
+                    command[cmd] = NULL ;
+                    cmd++ ; 
                     i++ ;
                 }
-                else if( strcmp( input->fields[i], "<" ) == 0 ){
-                    hasInput = 1 ;
-                    inputFile = strdup( input->fields[ i + 1 ] ) ;
-                    command[cmdInd] = NULL ;
-                    cmdInd++ ; 
+
+                // Opens file as stdin 
+                else if( strcmp( is->fields[i], "<" ) == 0 ){
+                    inputFlag = 1 ;
+                    input = strdup( is->fields[ i + 1 ] ) ;
+                    command[cmd] = NULL ;
+                    cmd++ ; 
                     i++ ;
                 }
-                else{   
-                    command[cmdInd] = strdup( input->fields[i] ) ;
+                
+                // Anything else 
+                else{
+                    command[cmd] = strdup( is->fields[i] ) ;
                 }
                 i++ ; 
-                cmdInd++ ;
+                cmd++ ;
             }
-            command[cmdInd] = NULL ;
-            newargv[pipe] = command ;
+            command[cmd] = NULL ;
+            newArgv[pipe] = command ;
             i++ ; 
-            cmdInd++ ;
+            cmd++ ;
         }
 
-        // Pipe fork 
-        int prev_fd = -1 ;
-        if( pipeCount != 0 ){
-            for ( int i = 0 ; i < pipeCount + 1 ; i++ ){
+        // If there's a pipe.... 
+        int pipeFD = -1 ;
+        if( pipeCounter != 0 ){
+            for ( int i = 0 ; i < ( pipeCounter + 1 ) ; i++ ){
                 int pipefd[2] ;
+                
+                // Connect processes
                 if ( pipe(pipefd) < 0 ){
                     perror( "jsh: pipe" ) ;
                     exit(1) ;
                 }
+
+                // Flush and fork
                 fflush(stdin)  ;
                 fflush(stdout) ; 
                 fflush(stderr) ;
                 pid = fork() ; 
                 
+
                 if( pid == 0 ){
                     
                     // If it uses "<" redirection, open the file as stdin
-                    if( hasInput && i == 0 ){
-                        int fd1 = open( inputFile, O_RDONLY ) ;
+                    if( ( inputFlag == 1 ) && ( i == 0 ) ){
+                        int fd1 = open( input, O_RDONLY ) ;
                         if( fd1 < 0 ){
-                            perror( inputFile ) ;
+                            perror( input ) ;
                             exit(1) ;
                         }
                         if( dup2( fd1, 0 ) != 0 ){
-                            perror( inputFile ) ;
+                            perror( input ) ;
                             exit(1) ;
                         }
                         close(fd1) ;
-                        free(inputFile) ;
+                        free(input) ;
                     }
 
                     // If it uses ">" redirection, open the file as stdout
-                    if( i == pipeCount ){
-                        if( hasOutputTruncate ){
-                            int fd2 = open( outputFileTruncate, O_WRONLY | O_TRUNC | O_CREAT, 0644 ) ;
+                    if( i == pipeCounter ){
+                        if( OTFlag ){
+                            int fd2 = open( outputFT, O_WRONLY | O_TRUNC | O_CREAT, 0644 ) ;
                             if( fd2 < 0 ){
-                                perror( outputFileTruncate ) ;
+                                perror( outputFT ) ;
                                 exit(1) ;
                             }
                             if ( dup2(fd2, 1) != 1 ) {
-                                perror( outputFileTruncate ) ;
+                                perror( outputFT ) ;
                                 exit(1);
                             }
                             close(fd2);
-                            free (outputFileTruncate);
+                            free (outputFT);
                         }
 
                         // If it uses ">>" redirection, open as stdout without truncation
-                        if( hasOutputAppend ){
-                            int fd3 = open( outputFileAppend, O_WRONLY | O_APPEND | O_CREAT, 0644 ) ;
+                        if( OAFlag ){
+                            int fd3 = open( outputFA, O_WRONLY | O_APPEND | O_CREAT, 0644 ) ;
                             if( fd3 < 0 ){
-                                perror( outputFileAppend ) ;
+                                perror( outputFA ) ;
                                 exit(1) ;
                             }
                             if( dup2( fd3, 1 ) != 1 ){
-                                perror( outputFileAppend ) ;
+                                perror( outputFA ) ;
                                 exit(1) ;
                             }
                             close(fd3) ;
-                            free( outputFileAppend ) ;
+                            free( outputFA ) ;
                         }
                     }
 
@@ -171,49 +189,51 @@ int main( int argc, char** argv ){
                     if( i == 0 ){
                         dup2( pipefd[1], 1 ) ;
                     }
-                    if( ( i <  pipeCount ) && ( 0 < i ) ){
-                        dup2( prev_fd, 0 ) ;
+                    if( ( i <  pipeCounter ) && ( 0 < i ) ){
+                        dup2( pipeFD, 0 ) ;
                         dup2( pipefd[1], 1 ) ;
                     }
-                    if( i == pipeCount ){
-                        dup2( prev_fd, 0 ) ;
+                    if( i == pipeCounter ){
+                        dup2( pipeFD, 0 ) ;
                     }
 
-                    close( prev_fd ) ;
+                    // Close all the pipes 
+                    close( pipeFD ) ;
                     close( pipefd[0] ) ;
                     close( pipefd[1] ) ;
 
-                    execvp( newargv[i][0], newargv[i] ) ;
-                    perror( newargv[i][0] ) ;
+                    // Call exec on the commands 
+                    execvp( newArgv[i][0], newArgv[i] ) ;
+                    perror( newArgv[i][0] ) ;
                     exit(1) ;       
                 }
                 
-                // Tree keeps track of PIDs
+                // Tree keeps track of pids
                 else{
-                    jrb_insert_int( pidJrb, pid, new_jval_i(pid) ) ;
-                    close( prev_fd ) ;
-                    prev_fd = pipefd[0] ;
+                    jrb_insert_int( pidJRB, pid, new_jval_i(pid) ) ;
+                    close( pipeFD ) ;
+                    pipeFD = pipefd[0] ;
                     close( pipefd[1] ) ;
 
-                    if( i == pipeCount ){
+                    if( i == pipeCounter ){
                         close( pipefd[0] ) ;
                     }
                 }
             }
 
-            // Waits until PIDs are removed
+            // Cleans up zombie processes
             if( parentWait ){
-                while( !jrb_empty(pidJrb) ){
+                while( !jrb_empty(pidJRB) ){
                     pid = wait( &status ) ;
-                    temp = jrb_find_int( pidJrb, pid ) ;
-                    if( temp != NULL ){
-                        jrb_delete_node(temp) ;
+                    tmp = jrb_find_int( pidJRB, pid ) ;
+                    if( tmp != NULL ){
+                        jrb_delete_node(tmp) ;
                     }
                 }
             }
         }
 
-        // Forks the child 
+        // Flush and forks the child 
         else{
             fflush(stdin)  ;
             fflush(stdout) ; 
@@ -222,70 +242,74 @@ int main( int argc, char** argv ){
             if( pid == 0 ){
 
                 // Opens the input file for "<"
-                if( hasInput ){
-                    int fd1 = open( inputFile, O_RDONLY ) ;
+                if( inputFlag ){
+                    int fd1 = open( input, O_RDONLY ) ;
                     if( fd1 < 0 ){
-                        perror(inputFile) ;
+                        perror(input) ;
                         exit(1) ;
                     }
                     if( dup2(fd1, 0) != 0 ){
-                        perror(inputFile) ;
+                        perror(input) ;
                         exit(1) ;
                     }
                     close(fd1) ;
-                    free(inputFile) ;
+                    free(input) ;
                 }
 
                 // Opens the output file for ">"
-                if( hasOutputTruncate ){
-                    int fd2 = open(outputFileTruncate, O_WRONLY | O_TRUNC | O_CREAT, 0644);
+                if( OTFlag ){
+                    int fd2 = open(outputFT, O_WRONLY | O_TRUNC | O_CREAT, 0644);
                     if ( fd2 < 0 ) {
-                        perror(outputFileTruncate);
+                        perror(outputFT);
                         exit(1);
                     }
 
                     if ( dup2(fd2, 1) != 1 ) {
-                        perror(outputFileTruncate);
+                        perror(outputFT);
                         exit(1);
                     }
                     close(fd2);
-                    free (outputFileTruncate);
+                    free (outputFT);
                 }
 
                 // Opens the output file for ">>"
-                if( hasOutputAppend ){
-                    int fd3 = open( outputFileAppend, O_WRONLY | O_APPEND | O_CREAT, 0644 ) ;
+                if( OAFlag ){
+                    int fd3 = open( outputFA, O_WRONLY | O_APPEND | O_CREAT, 0644 ) ;
                     if( fd3 < 0 ){
-                        perror( outputFileAppend ) ;
+                        perror( outputFA ) ;
                         exit(1) ;
                     }
                     if( dup2(fd3, 1) != 1 ){
-                        perror(outputFileAppend) ;
+                        perror(outputFA) ;
                         exit(1) ;
                     }
                     close(fd3) ;
-                    free(outputFileAppend) ;
+                    free(outputFA) ;
                 }
 
-                execvp( newargv[0][0], newargv[0] ) ;
-                perror( newargv[0][0] ) ;
-
+                // Execute again
+                execvp( newArgv[0][0], newArgv[0] ) ;
+                perror( newArgv[0][0] ) ;
                 exit(0) ;
             }
-            else if( strcmp( input->fields[input->NF - 1 ], "&") != 0 ){
+            
+            // In case of no ampersand
+            else if( strcmp( is->fields[( is->NF ) - 1 ], "&") != 0 ){
                 while ( wait( &status ) != pid ) ;
             }
                 
         }
 
         // Reset the variable flags 
-        hasInput = 0 ;
-        hasOutputTruncate = 0 ; 
-        hasOutputAppend = 0 ;
+        inputFlag = 0 ;
+        OTFlag = 0 ; 
+        OAFlag = 0 ;
         parentWait = 1 ;
     }
-
+    
+    // Wait for the child process to finish 
     while ( wait(&status) != -1 ) ;
 
     return 0 ;
 }
+
